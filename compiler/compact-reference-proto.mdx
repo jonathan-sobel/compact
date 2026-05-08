@@ -19,7 +19,7 @@ have three parts:
 - public state that is stored and replicated in the Midnight ledger,
 - a set of zero-knowledge circuits, enabling confidential proofs that 
   the public ledger state resulted from valid executions of
-  the logic of the contract, and
+  the contract logic, and
 - local, off-chain functions implemented with arbitrary code, 
   allowing access to private state that never leaves the client.
 
@@ -376,7 +376,7 @@ at the point of call (in both `bar1` and `bar2`).
 ## Compact types
 
 Compact is *statically typed*: every expression in a Compact program must have
-a type that the compiler can prove to be safe in the expressions context,
+a type that the compiler can prove to be safe in the expression's context,
 for all possible values of the expression.
 For named circuits and witnesses, the parameters and return types must be explicitly
 declared.
