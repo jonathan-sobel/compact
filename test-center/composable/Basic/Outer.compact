@@ -32,3 +32,20 @@ export circuit setInner(i: Inner): Inner {
   inner = disclose(i);
   return lastInner;
 }
+
+export circuit echoStored(): Inner {
+  const a = inner;
+  const b = a;
+  return b;
+}
+
+export circuit echoInner(i: Inner): Inner {
+  const a = i;
+  const b = a;
+  return disclose(b);
+}
+
+export circuit addViaConst(value: Field): Field {
+  const target = inner;
+  return target.add(disclose(value));
+}

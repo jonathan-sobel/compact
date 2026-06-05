@@ -123,63 +123,62 @@
                      (for-each delete-directory created-dir*))
                    (raise-continuable c))
                  (lambda ()
-                   (parameterize ([contract-ht (make-hashtable symbol-hash eq?)])
-                     (cond
-                       [(eq? final-pass 'parse-file/format/reparse)
+                   (cond
+                     [(eq? final-pass 'parse-file/format/reparse)
+                      (with-target-ports
+                        `((formatter-output.compact . ,(format "formatter/~a" (path-last pathname))))
+                        (run-passes formatter-testing-passes pathname))]
+                     [(eq? final-pass 'parse-file/fixup/format/reparse)
+                      (with-target-ports
+                        `((fixup-output.compact . ,(format "fixup/~a" (path-last pathname))))
+                        (run-passes fixup-testing-passes pathname))]
+                     [else
+                      (let* ([lsrc-ir (run-passes parser-passes pathname)]
+                             [frontend-ir (run-passes frontend-passes lsrc-ir)]
+                             [analyzed-ir (run-passes analysis-passes frontend-ir)]
+                             [circuit-ir (run-passes circuit-passes analyzed-ir)]
+                             [proof-circuit-name* (extract-circuit-names circuit-ir)])
+                        (define output-subdirectories '("compiler" "contract" "zkir" "keys"))
+                        (for-each
+                          (lambda (fn) (rm-rf (format "~a/~a" output-directory-pathname fn)))
+                          output-subdirectories)
                         (with-target-ports
-                          `((formatter-output.compact . ,(format "formatter/~a" (path-last pathname))))
-                          (run-passes formatter-testing-passes pathname))]
-                       [(eq? final-pass 'parse-file/fixup/format/reparse)
+                          '((contract-info.json . "compiler/contract-info.json"))
+                          (run-passes save-contract-info-passes analyzed-ir proof-circuit-name*))
                         (with-target-ports
-                          `((fixup-output.compact . ,(format "fixup/~a" (path-last pathname))))
-                          (run-passes fixup-testing-passes pathname))]
-                       [else
-                        (let* ([lsrc-ir (run-passes parser-passes pathname)]
-                               [frontend-ir (run-passes frontend-passes lsrc-ir)]
-                               [analyzed-ir (run-passes analysis-passes frontend-ir)]
-                               [circuit-ir (run-passes circuit-passes analyzed-ir)]
-                               [proof-circuit-name* (extract-circuit-names circuit-ir)])
-                          (define output-subdirectories '("compiler" "contract" "zkir" "keys"))
-                          (for-each
-                            (lambda (fn) (rm-rf (format "~a/~a" output-directory-pathname fn)))
-                            output-subdirectories)
+                          (map (lambda (sym) (cons sym (format "zkir/~a.zkir" sym)))
+                               proof-circuit-name*)
+                          (run-passes (if (feature-zkir-v3) zkir-v3-passes zkir-passes) circuit-ir))
+                        (unless (null? (pending-conditions)) (raise (make-halt-condition)))
+                        (unless (skip-zk)
+                          (if (zero? (system "command -v zkir > /dev/null"))
+                              ;; If we have zero circuits, the zkir directory won't exist,
+                              ;; and zkir will fail to read it. Skip in that case silently.
+                              (when (file-exists? (format "~a/zkir" output-directory-pathname))
+                                ;; TODO: Properly string escape!
+                                (let ([res (system (format "exec ~a compile-many '~a/zkir' '~a/keys'"
+                                                     (if (feature-zkir-v3) "zkir-v3" "zkir")
+                                                     output-directory-pathname
+                                                     output-directory-pathname))])
+                                  (unless (zero? res)
+                                    (external-errorf "zkir returned a non-zero exit status ~d" res))))
+                              (unless (zkir-warning-issued)
+                                (zkir-warning-issued #t)
+                                (fprintf (console-error-port)
+                                  "Warning: ZKIR not found; skipping final circuit compilation.\n"))))
+                        (with-target-ports
+                         '((contract.js . "contract/index.js")
+                           (contract.d.ts . "contract/index.d.ts")
+                           (contract.js.map . "contract/index.js.map"))
+                         (parameterize ([proof-circuit-names proof-circuit-name*])
+                           (run-passes typescript-passes analyzed-ir)))
+                        (let ([manifest-pathname* created-file*])
                           (with-target-ports
-                            '((contract-info.json . "compiler/contract-info.json"))
-                            (run-passes save-contract-info-passes analyzed-ir proof-circuit-name*))
-                          (with-target-ports
-                            (map (lambda (sym) (cons sym (format "zkir/~a.zkir" sym)))
-                                 proof-circuit-name*)
-                            (run-passes (if (feature-zkir-v3) zkir-v3-passes zkir-passes) circuit-ir))
-                          (unless (null? (pending-conditions)) (raise (make-halt-condition)))
-                          (unless (skip-zk)
-                            (if (zero? (system "command -v zkir > /dev/null"))
-                                ;; If we have zero circuits, the zkir directory won't exist,
-                                ;; and zkir will fail to read it. Skip in that case silently.
-                                (when (file-exists? (format "~a/zkir" output-directory-pathname))
-                                  ;; TODO: Properly string escape!
-                                  (let ([res (system (format "exec ~a compile-many '~a/zkir' '~a/keys'"
-                                                       (if (feature-zkir-v3) "zkir-v3" "zkir")
-                                                       output-directory-pathname
-                                                       output-directory-pathname))])
-                                    (unless (zero? res)
-                                      (external-errorf "zkir returned a non-zero exit status ~d" res))))
-                                (unless (zkir-warning-issued)
-                                  (zkir-warning-issued #t)
-                                  (fprintf (console-error-port)
-                                    "Warning: ZKIR not found; skipping final circuit compilation.\n"))))
-                          (with-target-ports
-                           '((contract.js . "contract/index.js")
-                             (contract.d.ts . "contract/index.d.ts")
-                             (contract.js.map . "contract/index.js.map"))
-                           (parameterize ([proof-circuit-names proof-circuit-name*])
-                             (run-passes typescript-passes analyzed-ir)))
-                          (let ([manifest-pathname* created-file*])
-                            (with-target-ports
-                              '((contract-manifest.json . "compiler/contract-manifest.json"))
-                              (run-passes manifest-passes circuit-ir
-                                output-directory-pathname
-                                output-subdirectories)))
-                          (when final-pass (internal-errorf 'generate-everything "never encountered final pass ~s" final-pass)))]))))))))]))
+                            '((contract-manifest.json . "compiler/contract-manifest.json"))
+                            (run-passes manifest-passes circuit-ir
+                              output-directory-pathname
+                              output-subdirectories)))
+                        (when final-pass (internal-errorf 'generate-everything "never encountered final pass ~s" final-pass)))])))))))]))
 
   (define-pass extract-circuit-names : Lflattened (ir) -> * (ls)
     (definitions

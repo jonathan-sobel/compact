@@ -27,6 +27,7 @@ export * from './witness.js';
 export * from './contract-dependencies.js';
 export * from './utils.js';
 export * from './contract.js';
+export * from './providers.js';
 
 export {
   Value,

@@ -2261,6 +2261,23 @@
           (hashtable-set! var-ht var-name wump)
           (with-output-language (Lflattened Argument)
             `(argument (,(map car vn.pt*) ...) ,(build-type original-type (map cdr vn.pt*))))))
+      ;; Flattened Primitive-Types for a `len`-byte value: ⌈len/field-bytes⌉
+      ;; `tfield` limbs, where the high limb is bounded by `len mod field-bytes`
+      ;; (or full-width if it divides evenly).  Shared by the tbytes and
+      ;; tcontract cases of Type->Wump — both flatten as Bytes<len>, the
+      ;; former with the source-level length, the latter with 32 (a contract
+      ;; address).
+      (define (bytes->primitive-types len)
+        (with-output-language (Lflattened Primitive-Type)
+          (let-values ([(q r) (div-and-mod len (field-bytes))])
+            (let ([ls (make-list q `(tfield ,(- (expt 2 (* (field-bytes) 8)) 1)))])
+              (if (fx= r 0) ls (cons `(tfield ,(max 0 (- (expt 2 (* r 8)) 1))) ls))))))
+      ;; All-zero limb list for `default<…>` of a `len`-byte value.  Same
+      ;; ⌈len/field-bytes⌉ count as `bytes->primitive-types`, just filled
+      ;; with 0s rather than tfield types.  Shared by the tbytes and
+      ;; tcontract cases of the (default …) Rhs handler.
+      (define (bytes-default-limbs len)
+        (make-list (quotient (+ len (- (field-bytes) 1)) (field-bytes)) 0))
       )
     (Program : Program (ir) -> Program ()
       [(program ,src ((,export-name* ,name*) ...) ,pelt* ...)
@@ -2320,18 +2337,10 @@
       [(tvector ,src ,len ,[Type->Wump : type -> * wump])
        (Wump-vector (make-list len wump))]
       [(tbytes ,src ,len)
-       (Wump-bytes
-         (with-output-language (Lflattened Primitive-Type)
-           (let-values ([(q r) (div-and-mod len (field-bytes))])
-             (let ([ls (make-list q `(tfield ,(- (expt 2 (* (field-bytes) 8)) 1)))])
-               (if (fx= r 0) ls (cons `(tfield ,(max 0 (- (expt 2 (* r 8)) 1))) ls))))))]
+       (Wump-bytes (bytes->primitive-types len))]
       [(tcontract ,src ,contract-name (,elt-name* ,pure-dcl* (,type** ...) ,type*) ...)
-       ; A contract value flattens identically to (tbytes 32)
-       (Wump-bytes
-         (with-output-language (Lflattened Primitive-Type)
-           (let-values ([(q r) (div-and-mod 32 (field-bytes))])
-             (let ([ls (make-list q `(tfield ,(- (expt 2 (* (field-bytes) 8)) 1)))])
-               (if (fx= r 0) ls (cons `(tfield ,(max 0 (- (expt 2 (* r 8)) 1))) ls))))))]
+       ; A contract value flattens identically to (tbytes 32).
+       (Wump-bytes (bytes->primitive-types 32))]
       [(ttuple ,src ,[Type->Wump : type* -> * wump*] ...)
        (Wump-vector wump*)]
       [(tstruct ,src ,struct-name (,elt-name* ,[Type->Wump : type -> * wump*]) ...)
@@ -2372,13 +2381,10 @@
                       [(tfield ,src) (trivial (Wump-single 0))]
                       [(tunsigned ,src ,nat) (trivial (Wump-single 0))]
                       [(tbytes ,src ,len)
-                       (trivial (Wump-bytes
-                                  (make-list
-                                    (quotient (+ len (- (field-bytes) 1)) (field-bytes))
-                                    0)))]
+                       (trivial (Wump-bytes (bytes-default-limbs len)))]
                       [(tcontract ,src ,contract-name (,elt-name* ,pure-dcl* (,type** ...) ,type*) ...)
-                       ; `default<C>` is the all-zero address
-                       (trivial (Wump-bytes (make-list (quotient (+ 32 (- (field-bytes) 1)) (field-bytes)) 0)))]
+                       ; `default<C>` is the all-zero address.
+                       (trivial (Wump-bytes (bytes-default-limbs 32)))]
                       [(topaque ,src ,opaque-type) (guard (string=? opaque-type "JubjubPoint"))
                        (with-output-language (Lflattened Statement)
                          (let ([t1 (make-new-id var-name)])

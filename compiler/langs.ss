@@ -846,7 +846,7 @@
          (hashtable (descriptor-table))))
     (Program (p)
       (- (program src (contract-name* ...) ((export-name* name*) ...) pelt* ...))
-      (+ (program src ((export-name* name*) ...) tdescs pelt* ...) => (program #f tdescs #f pelt* ...)))
+      (+ (program src (contract-name* ...) ((export-name* name*) ...) tdescs pelt* ...) => (program #f tdescs #f pelt* ...)))
     (Type-Descriptors (tdescs)
       (+ (type-descriptors descriptor-table (descriptor-id* type*) ...) =>
            (type-descriptors #f (descriptor-id* type*) ...)))
@@ -1156,7 +1156,6 @@
          (abytes nat)
          (afield)
          (aadt)
-         (acontract)
          (anative opaque-type)))
     (Type (type)
       (- (tboolean src)

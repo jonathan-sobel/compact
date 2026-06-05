@@ -490,11 +490,7 @@
                                                          [(acompress) -1]
                                                          [(abytes ,nat) nat]
                                                          [(afield) -2]
-                                                         [(aadt) -3]
-                                                         [(acontract)
-                                                          ;; tcontract values flatten with (abytes 32) alignment now
-                                                          ;; should never reach the assembler
-                                                          (assert cannot-happen)]))
+                                                         [(aadt) -3]))
                                                       alignment*)]))]
                               [null-for-alignment (lambda (alignment)
                                                     (apply append

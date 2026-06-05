@@ -191,7 +191,7 @@
              (with-output-language (Ltypescript Type)
                `(tunsigned ,src ,(- (expt 2 128) 1))))
            (let-values ([(descriptor-id* type*) (get-descriptors)])
-             `(program ,src ((,export-name* ,name*) ...)
+             `(program ,src (,contract-name* ...) ((,export-name* ,name*) ...)
                 (type-descriptors ,descriptor-table (,descriptor-id* ,type*) ...)
                 ,pelt* ...))))])
     (Program-Element : Program-Element (ir) -> Program-Element ()
@@ -815,43 +815,6 @@
           (if (symbol? contract-name)
               (symbol->string contract-name)
               contract-name))
-      (define (get-contract-dependencies)
-        (define (contract-info-filename contract-name)
-          (format "~a/~a/compiler/contract-info.json"
-            (path-parent (target-directory))
-            contract-name))
-        (define (malformed msg contract-name . args)
-          (external-errorf "malformed contract-info file ~a for ~s: ~a; try recompiling ~a"
-                           (contract-info-filename contract-name)
-                           contract-name
-                           (apply format msg args)
-                           contract-name))
-        (define (get-assoc key contract-name alist)
-          (cond
-            [(and (pair? alist) (assoc key alist)) => cdr]
-            [else (malformed "missing association for ~s" contract-name key)]))
-        (define (get-witness-names contract-name v)
-          (fold-right (lambda (alist name*) (cons (get-assoc "name" contract-name alist) name*))
-                      '()
-                      (vector->list v)))
-        (let* ([contract-has-witness-ht (make-hashtable symbol-hash eq?)]
-               [contract-ht (contract-ht)]
-               [dep-contracts (vector->list (hashtable-keys contract-ht))]
-               [contract-has-witness*
-                 (fold-right (lambda (contract-name contract-name*)
-                               (let ([a (hashtable-cell contract-has-witness-ht contract-name 'unvisited)])
-                                 (when (eq? (cdr a) 'unvisited)
-                                   (let* ([info (hashtable-cell contract-ht contract-name #f)]
-                                          [alist (cdr info)]
-                                          [v (get-assoc "witnesses" contract-name alist)])
-                                     (unless (vector? v) (malformed "\"witnesses\" is not associated with a vector" contract-name))
-                                     (set-cdr! a (get-witness-names contract-name v))))
-                                 (if (eq? (cdr a) '())
-                                     contract-name*
-                                     (cons (car a) contract-name*))))
-                   '()
-                   dep-contracts)])
-          (values contract-has-witness* contract-has-witness-ht)))
 
       (define (subst-tcontract type)
         (nanopass-case (Ltypescript Type) (de-alias type)
@@ -2395,25 +2358,17 @@
         (define (print-contract-footer)
           (display-string "//# sourceMappingURL=index.js.map\n"))
 
-        (define (print-contract.js src descriptor-id* type* xpelt* uname*)
+        (define (print-contract.js src contract-name* descriptor-id* type* xpelt* uname*)
           (parameterize ([current-output-port (get-target-port 'contract.js)])
             (fluid-let ([sourcemap-tracker (make-sourcemap-tracker)])
-              (let-values ([(contract-has-witness* contract-has-witness-ht) (get-contract-dependencies)])
-                (unless (null? contract-has-witness*)
-                  (source-errorf src
-                    "cross-contract dependency ~a declares witness(es) ~a; only the root contract may declare witnesses"
-                    (car contract-has-witness*)
-                    (hashtable-ref contract-has-witness-ht (car contract-has-witness*) '())))
-                (let ([contract-dependency*
-                        (vector->list (hashtable-keys (contract-ht)))])
-                  (print-contract-header contract-dependency*)
-                  (print-exported-types xpelt*)
-                  (print-contract-descriptors src descriptor-id* type*)
-                  (print-contract-class src xpelt* uname*)
-                  (for-each print-contract-reference-locations xpelt*)
-                  (print-contract-footer)
-                  (record-sourcemap-eof! sourcemap-tracker (port-position (current-output-port)))
-                  (display-sourcemap sourcemap-tracker (get-target-port 'contract.js.map))))))))
+              (print-contract-header contract-name*)
+              (print-exported-types xpelt*)
+              (print-contract-descriptors src descriptor-id* type*)
+              (print-contract-class src xpelt* uname*)
+              (for-each print-contract-reference-locations xpelt*)
+              (print-contract-footer)
+              (record-sourcemap-eof! sourcemap-tracker (port-position (current-output-port)))
+              (display-sourcemap sourcemap-tracker (get-target-port 'contract.js.map))))))
 
       (define (format-javascript-string s)
         (define quote-seen #f)
@@ -2619,12 +2574,12 @@
           [else #f]))
       )
     (Program : Program (ir) -> Program ()
-      [(program ,src ((,export-name* ,name*) ...) (type-descriptors ,descriptor-table^ (,descriptor-id* ,type*) ...) ,pelt* ...)
+      [(program ,src (,contract-name* ...) ((,export-name* ,name*) ...) (type-descriptors ,descriptor-table^ (,descriptor-id* ,type*) ...) ,pelt* ...)
        (let* ([xpelt* (maplr (lambda (x) (Program-Element x (map cons export-name* name*))) pelt*)]
               [uname* (maplr xpelt->uname xpelt*)])
          (print-contract.d.ts src xpelt* uname*)
          (fluid-let ([descriptor-table descriptor-table^])
-           (print-contract.js src descriptor-id* type* xpelt* uname*)))
+           (print-contract.js src contract-name* descriptor-id* type* xpelt* uname*)))
        ir])
     (Program-Element : Program-Element (ir export-alist) -> * (xpelt)
       (definitions

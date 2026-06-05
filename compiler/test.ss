@@ -787,6 +787,7 @@ groups than for single tests.
                     '(
                       "import * as runtime from '@midnight-ntwrk/compact-runtime';\n"
                       "import { startContract, flushProofChecks } from './util.js';\n"
+                      "import { deployDependency, startContractGroup } from './ccc-util.js';\n"
                       "import { describe, expect, test, afterEach } from 'vitest';\n"
                       "\n"
                       "afterEach(async () => {\n"
@@ -33006,10 +33007,7 @@ groups than for single tests.
          "}"
          "export circuit foo(c: C1): C1 { return c; }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("C2.compact line 5 char 1" "invalid type ~a for circuit ~a return value:\n  exported circuit return values cannot include contract values" ("contract C1<foo(Bytes<32>): [], pure barr(): Bytes<32>>" foo)))
-     )
+     (succeeds))
     )
 
   (test-group
@@ -33027,33 +33025,8 @@ groups than for single tests.
          "}"
          "export circuit foo(c: C1): Vector<1, C1> { return [c]; }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("C2.compact line 5 char 1" "invalid type ~a for circuit ~a return value:\n  exported circuit return values cannot include contract values" ("Vector<1, contract C1<foo(Bytes<32>): [], pure barr(): Bytes<32>>>" foo)))
-     )
-    )
-
-  (test-group
-    ((create-file "C.compact"
-       '(
-         "export circuit foo(x: Bytes<32>): [] { return; }"
-         ))
      (succeeds))
-    ((create-file "testfile.compact"
-       '(
-         "import CompactStandardLibrary;"
-         "contract C {"
-         "  circuit foo(x: Bytes<32>): [];"
-         "  pure circuit barr(): Bytes<32>;"
-         "}"
-         "ledger contract_c: C;"
-         "constructor (c: C) { contract_c = disclose(c); }"
-         "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
-         ))
-      (oops
-        message: "~a:\n  ~?"
-        irritants: '("testfile.compact line 4 char 3" "contract declaration has a circuit named ~s, but it is not present in the actual contract definition" (barr)))
-     ))
+    )
 
   (test-group
     ((create-file "C.compact"
@@ -34230,8 +34203,7 @@ groups than for single tests.
          ))
      (oops
        message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 7 char 1" "invalid type ~a for witness ~a return value:\n  witness return values cannot include contract values" ("contract C<foo(Field): [], pure bar(): Field>" check)))
-     ))
+       irritants: '("testfile.compact line 3 char 3" "contract declaration claims circuit ~s has ~s argument~:*~p, but in the actual contract definition it has ~s" (foo 1 0)))))
 
   (test-group
     ((create-file "C.compact"
@@ -34253,8 +34225,7 @@ groups than for single tests.
          ))
      (oops
        message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 7 char 1" "invalid type ~a for witness ~a return value:\n  witness return values cannot include contract values" ("Vector<3, contract C<foo(Field): [], pure bar(): Field>>" check)))
-     ))
+       irritants: '("testfile.compact line 3 char 3" "contract declaration claims circuit ~s has ~s argument~:*~p, but in the actual contract definition it has ~s" (foo 1 0)))))
 
   (test-group
     ((create-file "C.compact"
@@ -34277,8 +34248,7 @@ groups than for single tests.
          ))
      (oops
        message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 8 char 1" "invalid type ~a for witness ~a return value:\n  witness return values cannot include contract values" ("struct S<c: contract C<foo(Field): [], pure bar(): Field>>" check)))
-     ))
+       irritants: '("testfile.compact line 4 char 3" "contract declaration claims circuit ~s has ~s argument~:*~p, but in the actual contract definition it has ~s" (foo 1 0)))))
 
   (test-group
     ((create-file "C.compact"
@@ -34427,10 +34397,7 @@ groups than for single tests.
          "}"
          "export circuit foo(c: C): [] {return;}"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 5 char 1" "invalid type ~a for circuit ~a argument ~d:\n  exported circuit arguments cannot include contract values" ("contract C<foo(): [], pure bar(): Field>" foo 1)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -34448,10 +34415,7 @@ groups than for single tests.
          "}"
          "export circuit foo(s: S): [] {return;}"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for circuit ~a argument ~d:\n  exported circuit arguments cannot include contract values" ("struct S<c: contract C<foo(): [], pure bar(): Field>, b: Boolean>" foo 1)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -34468,10 +34432,7 @@ groups than for single tests.
          "}"
          "export circuit foo(x: Boolean, c: C): [] {return;}"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 5 char 1" "invalid type ~a for circuit ~a argument ~d:\n  exported circuit arguments cannot include contract values" ("contract C<foo(): [], pure bar(): Field>" foo 2)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -34491,10 +34452,7 @@ groups than for single tests.
          "constructor(c: C) {contract_c = disclose(c);}"
          "export circuit foo(): C {return contract_c;}"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 8 char 1" "invalid type ~a for circuit ~a return value:\n  exported circuit return values cannot include contract values" ("contract C<foo(): [], pure bar(): Field>" foo)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37344,10 +37302,7 @@ groups than for single tests.
          "witness W(): C1;"
          "ledger contract_c: C;"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for witness ~a return value:\n  witness return values cannot include contract values" ("contract C<foo(Bytes<32>): [], pure bar(): Bytes<32>>" W)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37366,10 +37321,7 @@ groups than for single tests.
          "witness W(): C1;"
          "ledger contract_c: C;"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for witness ~a return value:\n  witness return values cannot include contract values" ("C1" W)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37387,10 +37339,7 @@ groups than for single tests.
          "type C1 = C;"
          "export circuit foo(): C1 { return default<C1>; }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for circuit ~a return value:\n  exported circuit return values cannot include contract values" ("contract C<foo(Bytes<32>): [], pure bar(): Bytes<32>>" foo)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37408,10 +37357,7 @@ groups than for single tests.
          "new type C1 = C;"
          "export circuit foo(b: Boolean, c: C1): [] { }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for circuit ~a argument ~d:\n  exported circuit arguments cannot include contract values" ("C1" foo 2)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37429,10 +37375,7 @@ groups than for single tests.
          "new type C1 = C;"
          "export circuit foo(b: Boolean, c: [ C1, Uint<32> ]): [] { }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 6 char 1" "invalid type ~a for circuit ~a argument ~d:\n  exported circuit arguments cannot include contract values" ("[C1, Uint<32>]" foo 2)))
-     ))
+     (succeeds)))
 
   (test-group
     ((create-file "C.compact"
@@ -37560,50 +37503,42 @@ groups than for single tests.
            ((%contract_c.1
               (0)
               (__compact_Cell
-                (ty ((acontract))
-                    ((tcontract C
-                       (foo #f ((ty ((abytes 32))
-                                    ((tfield 255)
-                                      (tfield
-                                        452312848583266388373324160190187140051835877600158453279131187530910662655))))
-                         (ty () ()))
-                       (barr #t ()
-                         (ty ((abytes 32))
-                             ((tfield 255)
-                               (tfield
-                                 452312848583266388373324160190187140051835877600158453279131187530910662655)))))))))))
+                (ty ((abytes 32))
+                    ((tfield 255)
+                      (tfield
+                        452312848583266388373324160190187140051835877600158453279131187530910662655)))))))
          (circuit %hello.2 ()
               (ty () ())
-           (= 1 (%t.3) (public-ledger %contract_c.1 (0) read))
-           (= 1 (%t.4) (public-ledger %contract_c.1 (0) read))
-           (= 1 (%t.5 %t.6)
+           (= 1 (%t.3 %t.4) (public-ledger %contract_c.1 (0) read))
+           (= 1 (%t.5 %t.6) (public-ledger %contract_c.1 (0) read))
+           (= 1 (%t.7 %t.8)
               (contract-call barr
-                   (%t.4 (tcontract C
-                           (foo #f ((ty ((abytes 32))
+                   ((%t.5 %t.6) (tcontract C
+                                  (foo #f ((ty ((abytes 32))
+                                               ((tfield 255)
+                                                 (tfield
+                                                   452312848583266388373324160190187140051835877600158453279131187530910662655))))
+                                    (ty () ()))
+                                  (barr #t ()
+                                    (ty ((abytes 32))
                                         ((tfield 255)
                                           (tfield
-                                            452312848583266388373324160190187140051835877600158453279131187530910662655))))
-                             (ty () ()))
-                           (barr #t ()
-                             (ty ((abytes 32))
-                                 ((tfield 255)
-                                   (tfield
-                                     452312848583266388373324160190187140051835877600158453279131187530910662655))))))))
+                                            452312848583266388373324160190187140051835877600158453279131187530910662655))))))))
            (= 1 ()
               (contract-call foo
-                   (%t.3 (tcontract C
-                           (foo #f ((ty ((abytes 32))
+                   ((%t.3 %t.4) (tcontract C
+                                  (foo #f ((ty ((abytes 32))
+                                               ((tfield 255)
+                                                 (tfield
+                                                   452312848583266388373324160190187140051835877600158453279131187530910662655))))
+                                    (ty () ()))
+                                  (barr #t ()
+                                    (ty ((abytes 32))
                                         ((tfield 255)
                                           (tfield
-                                            452312848583266388373324160190187140051835877600158453279131187530910662655))))
-                             (ty () ()))
-                           (barr #t ()
-                             (ty ((abytes 32))
-                                 ((tfield 255)
-                                   (tfield
-                                     452312848583266388373324160190187140051835877600158453279131187530910662655))))))
-                %t.5
-                %t.6))
+                                            452312848583266388373324160190187140051835877600158453279131187530910662655))))))
+                %t.7
+                %t.8))
            ())))
      ))
 )
@@ -56833,8 +56768,6 @@ groups than for single tests.
         "}"))
     )
 
-  ; FIXME uncomment for CC print-TS pass implementation
-  #|
   (test-group
     ((create-file "C.compact"
        '(
@@ -56854,11 +56787,7 @@ groups than for single tests.
          "constructor (c: C) { contract_c = disclose(c); }"
          "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("UseC.compact line 2 char 1" "contract types are not yet implemented" ()))
-     ))
-  |#
+     (succeeds)))
 
   (test
     '(
@@ -64360,8 +64289,6 @@ groups than for single tests.
         "}"))
     )
 
-  ; FIXME uncomment for CC print-TS pass implementation
-  #|
   (test-group
     ((create-file "C.compact"
        '(
@@ -64381,11 +64308,7 @@ groups than for single tests.
          "constructor (c: C) { contract_c = disclose(c); }"
          "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
          ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("UseC.compact line 2 char 1" "contract types are not yet implemented" ()))
-     ))
-  |#
+     (succeeds)))
 
   (test
     '(
@@ -67341,31 +67264,28 @@ groups than for single tests.
 (with-parameter-values ([feature-zkir-v3 #f #t])
 (run-tests save-manifest
   (test-group
-    ((create-file "C1.compact"
+    ((create-file "C.compact"
        '(
-         "witness c1(x: Field): Field;"
-         "export circuit bar(): [] { return; }"
+         "export circuit foo(x: Bytes<32>): [] { return; }"
          ))
-      (succeeds))
-    ((create-file "C2.compact"
-       '(
-         "export enum E { F }"
-         "witness c2(x: Boolean): Boolean;"
-         "export circuit foo(x: E): E { return x; }"
-         ))
-     (custom-check
-       (lambda (pass-name x)
-         (let ([fn (format "~a/C2/compiler/contract-info.json" testdir)])
-           (replace-value-in-json fn '("witnesses") '())))))
+     (succeeds))
     ((create-file "testfile.compact"
        '(
-         "enum E { F }"
-         "witness c3(): [];"
-         "contract C2 { circuit foo(x: E): E; }"
+         "import CompactStandardLibrary;"
+         "contract C {"
+         "  circuit foo(x: Bytes<32>): [];"
+         "  pure circuit barr(): Bytes<32>;"
+         "}"
+         "ledger contract_c: C;"
+         "constructor (c: C) { contract_c = disclose(c); }"
+         "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
          ))
-      (oops
-       message: "malformed contract-info file ~a for ~s: ~a; try recompiling ~a"
-       irritants: '("compiler/testdir/C2/compiler/contract-info.json" C2 "\"witnesses\" is not associated with a vector" C2))
+    (stage-javascript
+      '(
+        "test('check 1', async () => {"
+        "  const [C, Ctxt] = await startContract(contractCode, {}, 0);"
+        "  });"
+        ))
      ))
 
   (test-group ; test of stage-javascript's handling of multiple contracts
@@ -70168,6 +70088,24 @@ groups than for single tests.
     "test-center/compact/threading.compact"
     (stage-javascript "test-center/ts/threading-hacky.ts"))
 
+  (test-group
+    ((source-file "test-center/composable/Basic/Inner.compact")
+     (stage-javascript innerCode '()))
+    ((source-file "test-center/composable/Basic/Outer.compact")
+     (stage-javascript outerCode "test-center/ts/composable/basic.ts")))
+
+  (test-group
+    ((source-file "test-center/composable/Storage/Inner.compact")
+     (stage-javascript innerCode '()))
+    ((source-file "test-center/composable/Storage/Outer.compact")
+     (stage-javascript outerCode "test-center/ts/composable/storage.ts")))
+
+  (test-group
+    ((source-file "test-center/composable/Witness/Inner.compact")
+     (stage-javascript innerCode '()))
+    ((source-file "test-center/composable/Witness/Outer.compact")
+     (stage-javascript outerCode "test-center/ts/composable/witness.ts")))
+
   (test
     "examples/tiny.compact"
     (output-file "compiler/testdir/contract/index.d.ts"
@@ -70227,7 +70165,7 @@ groups than for single tests.
     (output-file "compiler/testdir/contract/index.js"
       `(
         "import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';"
-        "__compactRuntime.checkRuntimeVersion('0.16.0');"
+        "__compactRuntime.checkRuntimeVersion('0.16.101');"
         ""
         "const _descriptor_0 = __compactRuntime.CompactTypeField;"
         ""
@@ -73657,41 +73595,6 @@ groups than for single tests.
         "});"
         ))
     )
-
-  ; FIXME uncomment for CC print-TS pass implementation
-  #|
-  (test-group
-    ((create-file "C.compact"
-       '(
-         "export circuit foo(x: Bytes<32>): [] { return; }"
-         "export circuit barr(): Bytes<32> { return pad(32, ''); }"
-         )
-       )
-     (succeeds))
-    ((create-file "UseC.compact"
-       '(
-         "import CompactStandardLibrary;"
-         "contract C {"
-         "  circuit foo(x: Bytes<32>): [];"
-         "  pure circuit barr(): Bytes<32>;"
-         "}"
-         "ledger contract_c: C;"
-         "constructor (c: C) { contract_c = disclose(c); }"
-         "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
-         ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("UseC.compact line 8 char 69" "contract calls are not yet supported" ()))
-     #|
-     (stage-javascript
-       '(
-         "test('check 1', async () => {"
-         "  expect(3n).toEqual(17n);"
-         "});"
-         ))
-     |#
-     ))
-  |#
 
   (test
     '(
@@ -80149,7 +80052,6 @@ groups than for single tests.
          "  M2$F = disclose(c1) as M2$C;"
          "}"
          ))
-     ; FIXME replace with stage-javascript checks for CC print-TS pass implementation
      (pass-returns print-typescript
        (program
          (type-descriptors (%descriptor.5 (tunsigned 18446744073709551615))

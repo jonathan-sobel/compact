@@ -224,6 +224,16 @@ export const scheduleProofChecks = (
     }
     const zkirFile = path.join(contractDir, 'zkir', `${entry.circuitId}.zkir`);
     if (!fs.existsSync(zkirFile)) {
+      // A circuit produces a .zkir file only when it performs public
+      // operations (ledger access or cross-contract calls). A witness-only
+      // circuit — one whose proof obligations are entirely private — has an
+      // empty public transcript and legitimately produces no zkir, so there
+      // is nothing to check against; skip it. Any other missing zkir means a
+      // circuit that should have one does not: a genuine harness/compiler
+      // failure we still want to surface.
+      if (entry.publicTranscript.length === 0) {
+        continue;
+      }
       throw new Error(`ZKIR file not found for circuit ${entry.circuitId} at expected path ${zkirFile}`);
     }
     registerProofCheck(checkCallProofData(entry, contractDir));

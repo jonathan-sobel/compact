@@ -1242,6 +1242,7 @@
 
   (define-pass infer-types : Lexpanded (ir) -> Ltypes ()
     (definitions
+      (define contract-name-ht)
       (define-syntax T
         (syntax-rules ()
           [(T ty clause ...)
@@ -2012,9 +2013,15 @@
        (for-each Set-Program-Element-Type! unused-pelt*)
        (for-each Set-Program-Element-Type! pelt*)
        (for-each External-Contract-Declaration! ecdecl*)
-       (maplr Program-Element unused-pelt*)
-       (let ([contract-name* (map get-contract-name ecdecl*)])
-         `(program ,src (,contract-name* ...) ((,export-name* ,name*) ...) ,(maplr Program-Element pelt*) ...))])
+       (fluid-let ([contract-name-ht (make-hashtable symbol-hash eq?)])
+         (maplr Program-Element unused-pelt*))
+       (fluid-let ([contract-name-ht (make-hashtable symbol-hash eq?)])
+         (let* ([pelt* (maplr Program-Element pelt*)]
+                [contract-name*
+                 (sort
+                   (lambda (x y) (string<? (symbol->string x) (symbol->string y)))
+                   (vector->list (hashtable-keys contract-name-ht)))])
+           `(program ,src (,contract-name* ...) ((,export-name* ,name*) ...) ,pelt* ...)))])
     (Set-Program-Element-Type! : Program-Element (ir) -> * (void)
       (definitions
         (define (build-function kind is-native name arg* type)
@@ -2032,6 +2039,12 @@
                             (format-type type)))
        (set-idtype! ledger-field-name (Idtype-Base type))]
       [else (void)])
+    (External-Contract-Declaration! : External-Contract-Declaration (ir) -> * (void)
+      [(external-contract ,src ,contract-name ,ecdecl-circuit* ...)
+       (for-each External-Contract-Circuit! ecdecl-circuit*)])
+    (External-Contract-Circuit! : External-Contract-Circuit (ir) -> * (void)
+      [(,src ,pure-dcl ,elt-name (,[arg*] ...) ,type)
+       (Non-ADT-Type type src "circuit ~a return" elt-name)])
     (Program-Element : Program-Element (ir) -> Program-Element ())
     (Ledger-Constructor : Ledger-Constructor (ir) -> Ledger-Constructor ()
       [(constructor ,src (,[arg*] ...) ,expr)
@@ -2185,6 +2198,7 @@
            (nanopass-case (Ltypes Type) (de-alias actual-type #t)
              [(tcontract ,src^ ,contract-name (,elt-name* ,pure-dcl* (,type** ...) ,type*) ... )
               (guard (not adt-type-only?))
+              (hashtable-set! contract-name-ht contract-name #t)
               (find-contract-circuit src src^ contract-name elt-name elt-name* type** type* actual-type actual-type* expr expr*)]
              [else (err)]))
          (nanopass-case (Ltypes Type) (de-alias actual-type #t)
@@ -5392,7 +5406,6 @@
 
   (define-passes analysis-passes
     (expand-modules-and-types        Lexpanded)
-    (generate-contract-ht            Lexpanded)
     (infer-types                     Ltypes)
     (remove-tundeclared              Lnotundeclared)
     (combine-ledger-declarations     Loneledger)
@@ -5409,7 +5422,6 @@
 
   (define-passes fixup-analysis-passes
     (expand-modules-and-types        Lexpanded)
-    (generate-contract-ht            Lexpanded)
     (infer-types                     Ltypes))
 
   (define-checker check-types/Lnodca Lnodca)

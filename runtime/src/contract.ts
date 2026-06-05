@@ -19,40 +19,43 @@ import {
   CallContext,
   CircuitContext,
   CircuitResults,
-  copyCallContext,
   createInitialQueryContext,
   emptyRunningCost,
   queryLedgerState,
   CommunicationCommitmentData,
 } from './circuit-context.js';
-import { ConstructorContext, ConstructorResult } from './constructor-context.js';
 import { assertDefined } from './error.js';
 import { assertIsContractAddress, fromHex } from './utils.js';
 import { CompactError } from './error.js';
 import { PartialProofData } from './proof-data.js';
-import {
-  CompactTypeBytes,
-  CompactTypeField,
-  CompactTypeUnsignedInteger,
-  ContractAddressDescriptor,
-  Bytes32Descriptor,
-} from './compact-types.js';
+import { CompactTypeField, CompactTypeUnsignedInteger, Bytes32Descriptor } from './compact-types.js';
 import { alignedConcat } from './built-ins.js';
 
 /**
- * The type of a provable circuit. A provable circuit is a function that accepts a circuit context and an arbitrary list of
- * parameters and returns a result and additional data used to construct a transaction.
+ * @internal
  */
-export type ProvableCircuit = (context: CircuitContext, ...args: any[]) => Promise<CircuitResults>;
+type ProvableCircuit = (context: CircuitContext, ...args: any[]) => Promise<CircuitResults>;
 
-export type ProvableCircuits = Record<CircuitId, ProvableCircuit>;
+/**
+ * @internal
+ */
+type ProvableCircuits = Record<CircuitId, ProvableCircuit>;
 
-export interface Contract {
+/**
+ * @internal
+ */
+type Contract = {
   provableCircuits: ProvableCircuits;
-}
+};
 
-export type ContractCtor = new (witnesses: Record<string, never>) => Contract;
+/**
+ * @internal
+ */
+type ContractCtor = new (witnesses: Record<string, never>) => Contract;
 
+/**
+ * @internal
+ */
 const resolveQueryContext = async (context: CircuitContext, callee: ocrt.ContractAddress): Promise<ocrt.QueryContext> => {
   if (callee in context.queryContexts) {
     return context.queryContexts[callee];
@@ -73,14 +76,51 @@ const resolveQueryContext = async (context: CircuitContext, callee: ocrt.Contrac
   return initialQueryContext;
 };
 
-const resolveGasCosts = (context: CircuitContext, callee: ocrt.ContractAddress): ocrt.RunningCost => {
+/**
+ * Gets the accumulated gas cost of a contract from the 'persistent' section of the circuit context.
+ * Because {@link resolveQueryContext} either throws an error or populates `context.gasCosts` with
+ * `emptyRunningCost`, throws an error if gas cost is not found.
+ *
+ * @internal
+ */
+const resolveGasCost = (context: CircuitContext, callee: ocrt.ContractAddress): ocrt.RunningCost => {
   if (callee in context.gasCosts) {
     return context.gasCosts[callee];
   }
-  throw new CompactError(`Gas costs for contract '${callee}' not found`);
+  throw new CompactError(`Bug found: gas cost for contract '${callee}' not found`);
 };
 
-export const setupCallContext = (
+/**
+ * @internal
+ */
+const copyCallContext = ({
+  circuitId,
+  contractAddress,
+  initialQueryContext,
+  currentQueryContext,
+  currentGasCost,
+  currentPrivateState,
+  currentZswapLocalState,
+  parentBlockHash,
+  time,
+}: CallContext): CallContext => ({
+  circuitId,
+  contractAddress,
+  initialQueryContext,
+  currentQueryContext,
+  currentGasCost,
+  currentPrivateState,
+  currentZswapLocalState,
+  parentBlockHash,
+  time,
+});
+
+/**
+ * Sets the call context up for the callee circuit. Called just before the callee is invoked.
+ *
+ * @internal
+ */
+const setupCallContext = (
   context: CircuitContext,
   circuitId: CircuitId,
   contractAddress: ocrt.ContractAddress,
@@ -97,7 +137,12 @@ export const setupCallContext = (
   context.callContext.currentZswapLocalState = undefined;
 };
 
-export const restoreCallContext = (
+/**
+ * Restores the call context to match the caller's context just before a cross-contract call occurred.
+ *
+ * @internal
+ */
+const restoreCallContext = (
   callerContext: CircuitContext,
   {
     circuitId,
@@ -122,7 +167,14 @@ export const restoreCallContext = (
   callerContext.callContext.time = time;
 };
 
-export const restoreCircuitContext = (
+/**
+ * Restores the circuit context to match the caller's context just before a cross-contract call occurred.
+ * Circuit contexts are copied when a function is invoked to keep the JS interfaces immutable. That means
+ * we must copy the top level values like `queryContexts` explicitly from the callee.
+ *
+ * @internal
+ */
+const restoreCircuitContext = (
   callerCircuitContext: CircuitContext,
   callerCallContext: CallContext,
   calleeCircuitContext: CircuitContext,
@@ -184,6 +236,13 @@ const frHexToAlignedValue = (frHex: string): ocrt.AlignedValue => {
 
 const KernelStateFieldIndexDescriptor = new CompactTypeUnsignedInteger(255n, 1);
 
+/**
+ * JavaScript code for a kernel call to 'claimContractCall'. This code must be
+ * kept in sync with the JS code that a real Compact source program would
+ * produce for 'Kernel.claimContractCall'.
+ *
+ * @internal
+ */
 const kernelClaimContractCall = (
   context: CircuitContext,
   callerPartialProofData: PartialProofData,
@@ -230,18 +289,18 @@ const createCommCommData = (input: ocrt.AlignedValue, output: ocrt.AlignedValue)
   return { commComm: ocrt.communicationCommitment(input, output, commCommRand), commCommRand };
 };
 
-export function assertNotDefaultContractAddress(address: ocrt.ContractAddress): void {
+const assertNotDefaultContractAddress = (address: ocrt.ContractAddress): void => {
   if (address === ocrt.dummyContractAddress()) {
     throw new CompactError(`Cannot perform cross-contract call to default contract address`);
   }
-}
+};
 
 /**
  * Calls a circuit defined in another contract from the currently executing contract and returns the result.
  *
- * @param circuitContext The circuitContext of the currently executing circuit.
- * @param calleeContractCtor The 'Contract' clas constructor defined in the callee module
- * @param calleeCircuitId The ID of the circuit to be called in the contract to be called.
+ * @param circuitContext The current circuit context.
+ * @param calleeContractCtor The 'Contract' class constructor defined in the callee module
+ * @param calleeCircuitId The name of the circuit to be called in the contract to be called.
  * @param calleeAddress The address of the contract to be called.
  * @param callerProofData The proof data instance created when the caller circuit was initialized.
  * @param args The arguments to the circuit to be called.
@@ -261,7 +320,7 @@ export const crossContractCall = async (
   const provableCircuit = new calleeContractCtor({}).provableCircuits[calleeCircuitId];
   assertDefined(provableCircuit, `'${calleeCircuitId}' for callee '${calleeAddress}'`);
   const calleeQueryContext = await resolveQueryContext(circuitContext, calleeAddress);
-  const calleeGasCosts = resolveGasCosts(circuitContext, calleeAddress);
+  const calleeGasCosts = resolveGasCost(circuitContext, calleeAddress);
   const callerCallContext = copyCallContext(circuitContext.callContext);
   setupCallContext(circuitContext, calleeCircuitId, calleeAddress, calleeQueryContext, calleeGasCosts);
   const circuitResult = await provableCircuit(circuitContext, ...args);

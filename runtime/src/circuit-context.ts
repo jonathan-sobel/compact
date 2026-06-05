@@ -23,10 +23,7 @@ import {
 } from './zswap.js';
 import { PartialProofData, ProofData } from './proof-data.js';
 import { CompactError, assertDefined } from './error.js';
-
-export interface ContractStateProvider {
-  getContractState(blockHash: string, address: ocrt.ContractAddress): Promise<ocrt.ContractState | undefined>;
-}
+import { ContractStateProvider } from './providers.js';
 
 export type CircuitId = string;
 
@@ -103,6 +100,12 @@ export interface CallContext<PS = any> {
   time: number;
 }
 
+/**
+ * List of data needed to construct proofs and transactions for all circuit calls
+ * resulting from executing a root circuit. The calls are in depth-first traversal order.
+ * In other words, the first circuit to complete execution is first, and the last circuit
+ * to complete execution (the root circuit) is last.
+ */
 export type CallProofDataTrace = CallProofData[];
 
 /**
@@ -139,6 +142,25 @@ export interface CircuitContext<PS = any> {
   stateProvider?: ContractStateProvider;
 }
 
+/**
+ * Entry point for constructing the {@link CircuitContext} to pass as an argument to a circuit. Always use this
+ * function to set up the initial circuit context.
+ *
+ * @param circuitId The name of the circuit being executed.
+ * @param contractAddress The address of the contract defining the circuit being executed.
+ * @param coinPublicKeyOrZswapState The initial Zswap local state information - used for tracking shielded coin transfers.
+ * @param contractState The initial ledger state to execute the contract again - most often a snapshot fetched from the chain.
+ * @param privateState The initial witness / private state to execute the contract again - most often a snapshot fetched
+ *                     from local storage.
+ * @param stateProvider The provider to use to dynamically fetch on-chain contract state. This is only used to execute
+ *                      cross-contract calls, and is not needed if the circuit being executed does not perform any
+ *                      cross-contract calls.
+ * @param gasLimit The maximum gas this contract should consume.
+ * @param costModel The model capturing how much ledger operations cost.
+ * @param time The current time. Used to execute the block time related kernel operations.
+ * @param parentBlockHash The hash of the block the transaction is being built on. Also passed to {@link ContractStateProvider}
+ *                        to fetch the correct contract states when executing cross-contract calls.
+ */
 export const createCircuitContext = <PS>(
   circuitId: CircuitId,
   contractAddress: ocrt.ContractAddress,
@@ -178,6 +200,17 @@ export const createCircuitContext = <PS>(
     stateProvider,
   };
 };
+
+/**
+ * @internal
+ */
+export const copyCircuitContext = (context: CircuitContext): CircuitContext => ({
+  ...context,
+  callContext: { ...context.callContext },
+  queryContexts: { ...context.queryContexts },
+  gasCosts: { ...context.gasCosts },
+  callProofDataTrace: [...context.callProofDataTrace],
+});
 
 /**
  * @internal
@@ -322,45 +355,7 @@ export const createCallContext = <PS>(
   };
 };
 
-export const copyCallContext = ({
-  circuitId,
-  contractAddress,
-  initialQueryContext,
-  currentQueryContext,
-  currentGasCost,
-  currentPrivateState,
-  currentZswapLocalState,
-  parentBlockHash,
-  time,
-}: CallContext): CallContext => ({
-  circuitId,
-  contractAddress,
-  initialQueryContext,
-  currentQueryContext,
-  currentGasCost,
-  currentPrivateState,
-  currentZswapLocalState,
-  parentBlockHash,
-  time,
-});
-
 /**
- * @internal
- */
-export const copyCircuitContext = (context: CircuitContext): CircuitContext => ({
-  ...context,
-  callContext: {
-    ...context.callContext,
-    currentGasCost: emptyRunningCost(),
-  },
-  queryContexts: { ...context.queryContexts },
-  gasCosts: { ...context.gasCosts },
-  callProofDataTrace: [...context.callProofDataTrace],
-});
-
-/**
- * Function for creating an initial running cost of zero.
- *
  * @internal
  */
 export const emptyRunningCost = (): ocrt.RunningCost => ({
@@ -369,15 +364,6 @@ export const emptyRunningCost = (): ocrt.RunningCost => ({
   bytesWritten: 0n,
   bytesDeleted: 0n,
 });
-
-export const addRunningCost = (a: ocrt.RunningCost, b: ocrt.RunningCost): ocrt.RunningCost => {
-  return {
-    readTime: a.readTime + b.readTime,
-    computeTime: a.computeTime + b.computeTime,
-    bytesWritten: a.bytesWritten + b.bytesWritten,
-    bytesDeleted: a.bytesDeleted + b.bytesDeleted,
-  };
-};
 
 /**
  * The results of the call to a Compact circuit
@@ -397,6 +383,15 @@ export interface CircuitResults<PS = any, R = any> {
    */
   gasCost: ocrt.RunningCost;
 }
+
+const addRunningCost = (a: ocrt.RunningCost, b: ocrt.RunningCost): ocrt.RunningCost => {
+  return {
+    readTime: a.readTime + b.readTime,
+    computeTime: a.computeTime + b.computeTime,
+    bytesWritten: a.bytesWritten + b.bytesWritten,
+    bytesDeleted: a.bytesDeleted + b.bytesDeleted,
+  };
+};
 
 /**
  * Runs a program (query) against the current ledger state in the given circuit context. Records the transcript in the

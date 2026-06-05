@@ -411,10 +411,6 @@
           [(acompress) -1]
           [(afield) -2]
           [(aadt) -3]
-          [(acontract)
-           ;; tcontract values flatten with (abytes 32) alignment now
-           ;; should never reach the assembler
-           (assert cannot-happen)]
           [(anative ,opaque-type)
            ;; These are handled specially because (1) they assemble into a sequence of alignment
            ;; atoms and (2) they need ZKIR instructions to be emitted.
