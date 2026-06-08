@@ -67312,7 +67312,11 @@ groups than for single tests.
        '(
          "export circuit foo(x: Bytes<32>): [] { return; }"
          ))
-     (succeeds))
+     ; each contract needs a stage-javascript form with a different contractCode name
+     ; the contractCode name is otherwise optional and defaults to contractCode
+     ; the list of test-code lines can be empty, in which case the stage-javascript form is
+     ; effectively the same as a (succeeds) form
+     (stage-javascript C '()))
     ((create-file "testfile.compact"
        '(
          "import CompactStandardLibrary;"
@@ -67320,9 +67324,7 @@ groups than for single tests.
          "  circuit foo(x: Bytes<32>): [];"
          "  pure circuit barr(): Bytes<32>;"
          "}"
-         "ledger contract_c: C;"
-         "constructor (c: C) { contract_c = disclose(c); }"
-         "export circuit hello(): [] { return contract_c.foo(contract_c.read().barr()); }"
+         "export circuit hello(c: C): [] { return disclose(c).foo(disclose(c).barr()); }"
          ))
     (stage-javascript
       '(
