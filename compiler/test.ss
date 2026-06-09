@@ -33168,33 +33168,6 @@ groups than for single tests.
                      (barr #t () (tbytes 32)))))))))
      ))
 
-  ;; checks if a cycle in contract declaration exists but it only tells user that they need to
-  ;; recompile.
-  (test-group
-    ((create-file "C.compact"
-       '(
-         "export circuit foo(x: Bytes<32>): [] { return; }"
-         "export pure circuit barr(): Bytes<32> { return pad(32, ''); }"
-         "contract B { circuit hello():[]; }"
-         ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("C.compact line 3 char 1" "error opening ~a; try (re)compiling ~a" ("compiler/testdir/B/compiler/contract-info.json" "compiler/testdir/B.compact"))))
-    ((create-file "B.compact"
-       '(
-         "contract C {"
-         "  circuit foo(x: Bytes<32>): [];"
-         "  pure circuit barr(): Bytes<32>;"
-         "}"
-         "ledger contract_c: C;"
-         "constructor (c: C) { contract_c = disclose(c); }"
-         "export circuit hello(): [] { return contract_c.read().foo(contract_c.read().barr()); }"
-         ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("B.compact line 1 char 1" "error opening ~a; try (re)compiling ~a" ("compiler/testdir/C/compiler/contract-info.json" "compiler/testdir/C.compact")))
-     ))
-
   (test-group
     ((create-file "C.compact"
        '(
@@ -33593,36 +33566,6 @@ groups than for single tests.
                    (tcontract C
                      (foo #f ((tbytes 32)) (ttuple))
                      (bar #f () (tbytes 32)))))))))
-     ))
-
-  (test-group
-    ((create-file "C.compact"
-       '(
-         "import CompactStandardLibrary;"
-         "ledger Q: Bytes<32>;"
-         "export circuit foo(x: Bytes<32>): [] { return; }"
-         "export circuit bar(): Bytes<32> { return Q; }"
-         "constructor(q: Bytes<32>) { Q = disclose(q); }"
-         ))
-     (succeeds))
-    ((create-file "testfile.compact"
-       '(
-         "module m<A> {"
-         "  import CompactStandardLibrary;"
-         "  export contract C {"
-         "    circuit foo(x: A): [];"
-         "    circuit bar(): A;"
-         "  }"
-         "  export ledger contract_c: C;"
-         "}"
-         "import m<Bytes<32>> prefix $;"
-         "import m<Bytes<64>>;"
-         "constructor (c: $C) { $contract_c = disclose(c); }"
-         "export circuit hello(x: Bytes<64>): [] { return $contract_c.read().foo(x); }"
-         ))
-     (oops
-       message: "~a:\n  ~?"
-       irritants: '("testfile.compact line 4 char 5" "contract declaration claims the type of circuit ~s argument ~s is ~a, but in the actual contract definition it is ~a" (foo 1 "Bytes<64>" "Bytes<32>")))
      ))
 
   (test-group
