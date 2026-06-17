@@ -72,18 +72,18 @@ enabling such multi-contract systems.  The main new features are:
 1. contract interface types: a collection of circuit signatures (that
    is, their names, parameter types, and return types) on which some
    other contract may depend,
-2. contract references in the public ledger state: contracts may hold
+2. contracts as values: variables and ledger fields can hold
    references to other contracts, and
 3. cross-contract calls: circuits in one contract can invoke the
    circuits of another contract.
 
-These features work together.  The contract references in the ledger
-are described by contract interface types, and the cross-contract
-calls are to circuits named in those interfaces.
+These features work together.  The contract variables and ledger
+fields are described by contract interface types, and the
+cross-contract calls are to circuits named in those interfaces.
 
 One may imagine a future version of Compact having quite rich support
 for multi-contract systems, with dynamic discovery of the actual
-circuit code that implements an interface and with support for witness
+circuit code that implements a contract interface and with support for witness
 functions and private state in called circuits.  This proposal
 describes only the first step in that direction.
 
@@ -119,7 +119,7 @@ A new form is added to Compact's program elements: the contract
 interface declaration.  Here is an example.
 
 ```compact
-interface Adder {
+contract interface Adder {
   circuit setAddAmount(n: Uint<64>): [];
   circuit addTo(n: Uint<64>): Uint<64>;
 }
@@ -127,17 +127,17 @@ interface Adder {
 
 The Compact grammar already includes a production for "external
 contract declaration."  This is replaced by a production for
-"interface declaration."  The only syntactic change is the use of the
-keyword `interface` in place of `contract`.  For clarity in the
+"contract interface declaration."  The only syntactic change is the use of the
+pair of keywords `contract interface` in place of `contract` alone.  For clarity in the
 grammar, the production's nonterminal should be renamed from
-_contract-declaration_ to _interface-declaration_, and the identifier
-for the interface should be renamed from _contract-name_ to
+_contract-declaration_ to _contract-interface-declaration_, and the identifier
+for the contract interface should be renamed from _contract-name_ to
 _interface-name_.  Also, _interface-name_ should be added as one of
 the meta-variables for _identifier_.
 
-Thus, the production _interface-declaration_ looks like
+Thus, the production _contract-interface-declaration_ looks like
 
-> `export`^opt `interface` _interface-name_ `{` _circuit-declaration_ `;` ... `;` _circuit-declaration_  `;`^opt `}` `;`^opt
+> `export`^opt `contract` `interface` _interface-name_ `{` _circuit-declaration_ `;` ... `;` _circuit-declaration_  `;`^opt `}` `;`^opt
 
 and likewise for the comma-separated version.  Note that
 _circuit-declaration_ is defined to require a "simple" parameter
@@ -149,34 +149,41 @@ declared in an interface, the contract is said to **implement** that
 interface.
 
 More precisely, define the **signature** of a circuit to be the types
-of its parameters, plus its return type.  Changing the parameter names
-or using destructuring patterns in a circuit definition does not
-change its signature, because the signature is defined only by the
-parameter and return *types*.  The circuit declarations in an
-interface also have signatures defined by their types.  For example,
-the signature of `addTo` in the `Adder` interface above is
+of its parameters, plus its return type, as well as whether it is
+declared to be `pure`.  Changing the parameter names or using
+destructuring patterns in a circuit definition does not change its
+signature, because the signature is defined only by the parameter and
+return *types*.  The circuit declarations in an interface also have
+signatures defined by their types and whether they are declared to be
+pure.  For example, the signature of `addTo` in the `Adder` interface
+above is
 
 > `Uint<64>` &rarr; `Uint<64>`
 
+<!--
 One circuit signature *S* is a **subtype** of another *T* when
-1. *S* and *T* have the same number of parameter types.
-2. The return type of *S* is a subtype of the return type of *T*.
-3. The type of each parameter of *T* is a subtype of the corresponding
+1. *S* and *T* are either (1) both declared `pure` or (2) neither declared `pure`.
+2. *S* and *T* have the same number of parameter types.
+3. The return type of *S* is a subtype of the return type of *T*.
+4. The type of each parameter of *T* is a subtype of the corresponding
    parameter of *S*.  That is, for signature *S* to be a subtype of
    signature *T*, *S*'s parameter types must be supertypes of *T*'s.
 
 (Formally, circuit signature subtyping is contravariant on parameter
 types and covariant on return types.)
-   
+-->
+
 A contract **implements** an interface when, for every circuit
 declared in the interface, the contract exports a circuit with the
-same name and with a signature that is a subtype of the one in the
-interface.
+same name and with a signature that is identical to <!-- a subtype of -->
+the one in the interface.
 
 For example, any contract that exports `setAddAmount` and `addTo`
 circuits with signatures identical to those declared above in the
-`Adder` interface implements the `Adder` interface.  A contract
-that exports circuits like these
+`Adder` interface implements the `Adder` interface.  
+
+<!--
+A contract that exports circuits like these
 
 ```compact
 export circuit setAddAmount(n: Uint<128>): [] {
@@ -189,6 +196,7 @@ export circuit addTo(n: Uint<128>): Uint<32> {
 ```
 
 also implements the `Adder` interface.
+-->
 
 This is true regardless of whether the contract declares any intention
 to implement the interface.  In other words, interface implementation
@@ -215,12 +223,12 @@ program-element production in the Compact grammar:
 > _implements-assertion_ &rarr; `contract implements` _interface-name_ `;`
 
 To reiterate what was previously stated, a contract implements an
-interface by exporting definitions for all the interface's declared
-circuits, no matter whether a `contract implements` declaration
-appears in the code.  If such a declaration _is_ present, though, then
-the compiler will verify it and reject the program with a compile-time
-error if the contract fails to export the circuits required by the
-interface.
+interface by exporting definitions with matching types and purity
+declarations for all the interface's declared circuits, no matter
+whether a `contract implements` declaration appears in the code.  If
+such a declaration _is_ present, though, then the compiler will verify
+it and reject the program with a compile-time error if the contract
+fails to export the circuits required by the interface.
 
 ### Contract References
 
@@ -242,7 +250,10 @@ constructor(a: Adder) {
 ```
 
 A contract type represents the set of deployed contracts that satisfy
-the corresponding contract interface.  This induces a subtype
+the corresponding contract interface.  
+
+<!--
+This induces a subtype
 relationship on contract types.  If the circuits declared in interface
 `B` are a superset of those declared in interface `A`, then contract
 type `B` is a subtype of contract type `A`.  A contract type can
@@ -251,6 +262,7 @@ bound of a pair of contract types is the intersection of their
 declared circuits, which may be empty.  (The empty interface is
 useless, but valid.)  Also, any pair of contract types has a greatest
 lower bound: the union of their declared circuits.
+-->
 
 No mechanism is provided by this proposal to *create* values with
 contract types.  Instead, the surrounding context (that is, the
@@ -298,15 +310,15 @@ discovery of the circuit code for other contracts.  To make it
 possible for this proposal to be implemented prior to such solutions
 being available, the following additional limitations are imposed.
 
-1. In order to implement an interface `T`, a contract must be defined
-   in the file `T.compact`, and its compilation artifacts must be
-   present alongside those of any callers of `T`'s circuits.  More
+1. In order to implement a contract interface `T`, a contract must be
+   defined in the file `T.compact`, and its compilation artifacts must
+   be present alongside those of any callers of `T`'s circuits.  More
    precisely, if the Compact implementation defines a search path for
    finding compiler outputs in the code it generates, then the outputs
    of compiling `T.compact` must be able to be found on that search
    path when executing any circuits that make cross-contract calls
    using references of type `T`.  This effectively limits any DApp to
-   a single implementation of each interface.
+   a single implementation of each contract interface.
 2. A contract that declares witnesses is unable to implement any
    interface.  This implies that every contract reference is to a
    contract with no private state, and every cross-contract call
@@ -348,8 +360,8 @@ Describe how the proposed solution affects existing systems, applications, and
 users.  Is it a breaking change?
 -->
 
-This proposal introduces new uses for the keywords `interface`,
-`contract`, and `implements`.  All of these were already reserved
+This proposal introduces new uses for the keywords `contract`,
+`interface`, and `implements`.  All of these were already reserved
 keywords in Compact.  The grammar production for interfaces replaces
 the existing one that used the keyword `contract`, but the contract
 type declaration form was not previously specified to have any
@@ -387,13 +399,13 @@ the contract's deployment.)
 
 The risks of this execution model are not changed by this proposal,
 but they are amplified, in the following sense.  When an application
-provides code for contract `C`, which calls a circuit of interface
-`T`, the application must also provide code for a contract that
-implements `T`.  The generated code for `C` assumes that the contract
-implementing `T` was produced by compiling `T.compact`.  Because the
-code is all executed in the same context (for example, the same web
-browser page/session), the code that the application delivers for `T`
-has access to all the private state associated with `C`.
+provides code for contract `C`, which calls a circuit of contract
+interface `T`, the application must also provide code for a contract
+that implements `T`.  The generated code for `C` assumes that the
+contract implementing `T` was produced by compiling `T.compact`.
+Because the code is all executed in the same context (for example, the
+same web browser page/session), the code that the application delivers
+for `T` has access to all the private state associated with `C`.
 
 The current proposal mitigates the risk of private state leakage
 across contracts by disallowing any contract with witness functions
@@ -437,7 +449,7 @@ limitations.
 The required changes to the Compact grammar have already been
 described in the Specification section.  Any implementation must also
 extend its type-checking system to handle the new contract interface
-types and their subtype relationships.
+types. <!-- and their subtype relationships. -->
 
 The implementation of a cross-contract call can generate JavaScript
 code that imports all the needed callee definitions from files with
@@ -491,7 +503,7 @@ dynamic composition of contracts, so it was set aside for now.
 ### Concrete Contract Types
 
 The current proposal introduced contract types that are entirely
-derived from *interfaces*.  Once again drawing inspiration from
+derived from contract *interfaces*.  Once again drawing inspiration from
 object-oriented languages, Compact could have not only interfaces, but
 also *concrete contract types*.  For example, defining a contract in
 `C.compact` could implicitly create a contract type `C`.  Other
@@ -499,7 +511,7 @@ contracts might use the type `C` as a program-defined type, able to
 refer to values that represented deployments of `C` (that is, exactly
 `C`, not "some contract with the circuits of `C`).
 
-An extreme step in this direction would be to abandon interface
+An extreme step in this direction would be to abandon interfaces
 altogether, allowing contract inheritance and abstract contract
 definitions, in which some or all of the circuits are declared, but
 not defined.  With this extension, the aforementioned contract type
@@ -538,16 +550,18 @@ ways to find the code were suggested.  Here are a few.
   uses the ledger-stored code.
   
 In fact, it is expected that a later proposal will extend Compact
-using this last idea: storing an intermediate representation of
-circuit code in the Midnight ledger.  If such an extension were not on
-the horizon, one of the other alternatives might have been included in
-this proposal, but with the expectation that a canonical definition
-for each circuit will soon be available, any other alternative would
-only create unnecessarily complicated infrastructure.
+using something like one of the last two ideas: finding the code for a
+contract in some external location, maybe the ledger.  If such an
+extension were not on the horizon, one of the other alternatives might
+have been included in this proposal, but with the expectation that a
+canonical definition for each circuit will soon be available, any
+other alternative would only create unnecessarily complicated
+infrastructure.
 
-## References
 
 <!--
+## References
+
 Link to relevant related work, such as research papers or similar features in
 other contexts.
 -->
