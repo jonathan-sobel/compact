@@ -70145,7 +70145,7 @@ groups than for single tests.
     (output-file "compiler/testdir/contract/index.js"
       `(
         "import * as __compactRuntime from '@midnight-ntwrk/compact-runtime';"
-        "__compactRuntime.checkRuntimeVersion('0.17.101');"
+        "__compactRuntime.checkRuntimeVersion('0.18.0');"
         ""
         "const _descriptor_0 = __compactRuntime.CompactTypeField;"
         ""
