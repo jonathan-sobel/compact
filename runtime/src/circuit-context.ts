@@ -109,6 +109,14 @@ export interface CallContext<PS = any> {
 export type CallProofDataTrace = CallProofData[];
 
 /**
+ * A `GatherResult` narrowed to log emissions, tagged with the address of the contract
+ * that emitted it; `content` is the encoded `VersionedLogItem` array.
+ */
+export type LogEvent = Extract<ocrt.GatherResult, { tag: 'log' }>['content'] & {
+  address: ocrt.ContractAddress;
+};
+
+/**
  * The external information accessible from within a Compact circuit call
  */
 export interface CircuitContext<PS = any> {
@@ -166,6 +174,13 @@ export interface CircuitContext<PS = any> {
    * is set.
    */
   activeContracts?: Set<ocrt.ContractAddress>;
+  /**
+   * Events emitted by the on-chain VM during circuit execution from `log` operations,
+   * each tagged with the address of the emitting contract. A single global list shared
+   * across the whole call tree (threaded like {@link callProofDataTrace}); a per-contract
+   * view is a filter over the `address` tag. Surfaced via `CircuitResults.context.events`.
+   */
+  events: LogEvent[];
 }
 
 /**
@@ -230,8 +245,8 @@ export const createCircuitContext = <PS>(
     gasLimit,
     stateProvider,
     reentrancyGuard: reentrancyGuard ?? true,
-    // The entry contract is on the call stack for the whole transaction.
     activeContracts: new Set([contractAddress]),
+    events: [],
   };
 };
 
@@ -249,6 +264,7 @@ export const copyCircuitContext = (context: CircuitContext): CircuitContext => (
   gasCosts: { ...context.gasCosts },
   contractStates: { ...context.contractStates },
   callProofDataTrace: [...context.callProofDataTrace],
+  events: [...context.events],
 });
 
 /**
@@ -441,7 +457,7 @@ export const queryLedgerState = (
   circuitContext: CircuitContext,
   partialProofData: PartialProofData,
   program: ocrt.Op<null>[],
-): ocrt.AlignedValue | ocrt.GatherResult[] => {
+): ocrt.AlignedValue | undefined => {
   try {
     const res = circuitContext.callContext.currentQueryContext.query(program, circuitContext.costModel, circuitContext.gasLimit);
     circuitContext.callContext.currentQueryContext = res.context;
@@ -455,6 +471,16 @@ export const queryLedgerState = (
       circuitContext.queryContexts[liveAddress] = res.context;
       const current_gas = circuitContext.gasCosts[liveAddress] ?? emptyRunningCost();
       circuitContext.gasCosts[liveAddress] = addRunningCost(current_gas, res.gasCost);
+
+      // Accumulate `log` events on the single global list, tagged with the contract that
+      // emitted them (`read` events instead fill the popeq results in the public transcript
+      // below). Gated by the same real-context check: the synthetic read-accessor context
+      // emits no logs and has neither an address nor an `events` list.
+      for (const ev of res.events) {
+        if (ev.tag === 'log') {
+          circuitContext.events.push({ ...ev.content, address: liveAddress });
+        }
+      }
     }
 
     const reads = res.events.filter((e) => e.tag === 'read');
@@ -462,22 +488,14 @@ export const queryLedgerState = (
     partialProofData.publicTranscript = partialProofData.publicTranscript.concat(
       program.map((op) =>
         typeof op === 'object' && 'popeq' in op
-          ? {
-              popeq: {
-                ...op.popeq,
-                result: reads[i++].content,
-              },
-            }
+          ? { popeq: { ...op.popeq, result: reads[i++].content } }
           : op,
       ) as ocrt.Op<ocrt.AlignedValue>[],
     );
-    if (res.events.length === 1) {
-      const event = res.events[0];
-      if (event.tag === 'read') {
-        return event.content;
-      }
+    if (res.events.length === 1 && res.events[0].tag === 'read') {
+      return res.events[0].content;
     }
-    return res.events;
+    return undefined;
   } catch (err) {
     if (err instanceof Error) {
       throw new CompactError(err.toString());

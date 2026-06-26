@@ -34,16 +34,16 @@
     ir)
 
   ; NB: must come after identify-pure-circuits
-  (define-pass extract-contract-info : Lnodisclose (ir proof-circuit-name*) -> * (json)
+  (define-pass extract-contract-info : Lloweredemit (ir proof-circuit-name*) -> * (json)
     (definitions
       ;; Flatten a Public-Ledger-Array B-tree into a list of Public-Ledger-Binding nodes.
       (define (flatten-pl-array pl-array)
-        (nanopass-case (Lnodisclose Public-Ledger-Array) pl-array
+        (nanopass-case (Lloweredemit Public-Ledger-Array) pl-array
           [(public-ledger-array ,pl-array-elt* ...)
            (apply append (map flatten-pl-array-elt pl-array-elt*))]))
 
       (define (flatten-pl-array-elt elt)
-        (nanopass-case (Lnodisclose Public-Ledger-Array-Element) elt
+        (nanopass-case (Lloweredemit Public-Ledger-Array-Element) elt
           [,pl-array (flatten-pl-array pl-array)]
           [,public-binding (list public-binding)]))
 
@@ -79,13 +79,13 @@
 
       ;; Extract an ADT-Arg as a JSON value via the Type transformer.
       (define (adt-arg->json arg)
-        (nanopass-case (Lnodisclose Public-Ledger-ADT-Arg) arg
+        (nanopass-case (Lloweredemit Public-Ledger-ADT-Arg) arg
           [,type (Type type)]
           [,nat nat]))
 
       ;; Unwrap aliases to reach the underlying tadt node for a ledger field.
       (define (unwrap-to-adt type)
-        (nanopass-case (Lnodisclose Type) type
+        (nanopass-case (Lloweredemit Type) type
           [(talias ,src ,nominal? ,type-name ,type)
            (unwrap-to-adt type)]
           [else type]))
@@ -131,7 +131,7 @@
            "contracts"
            (list->vector
              (map (lambda (ct)
-                    (nanopass-case (Lnodisclose Contract-Type) ct
+                    (nanopass-case (Lloweredemit Contract-Type) ct
                       [(tcontract ,src ,contract-name (,elt-name* ,pure-dcl* (,type** ...) ,type*) ...)
                        (tcontract-tail contract-name elt-name* pure-dcl* type** type*)]))
                   contract-type*)))
@@ -159,13 +159,13 @@
          (append
            (map
              (lambda (pb)
-               (nanopass-case (Lnodisclose Public-Ledger-Binding) pb
+               (nanopass-case (Lloweredemit Public-Ledger-Binding) pb
                  [(,src ,ledger-field-name (,path-index* ...) ,type)
                   (let ([name (symbol->string (id-sym ledger-field-name))]
                         [index (if (and (pair? path-index*) (null? (cdr path-index*))) (car path-index*) (list->vector path-index*))]
                         [exported (id-exported? ledger-field-name)]
                         [unwrapped (unwrap-to-adt type)])
-                    (nanopass-case (Lnodisclose Type) unwrapped
+                    (nanopass-case (Lloweredemit Type) unwrapped
                       [(tadt ,src ,adt-name ([,adt-formal* ,adt-arg*] ...) ,vm-expr (,adt-op* ...) (,adt-rt-op* ...))
                        (cons*
                          (cons "name" name)
@@ -284,5 +284,5 @@
     (Program ir))
 
   (define-passes save-contract-info-passes
-    (save-contract-info              Lnodisclose))
+    (save-contract-info              Lloweredemit))
 )
