@@ -35,11 +35,11 @@ Title: Rules for Contract Operations
    If the attachment is initiated by a cross-contract call, use the
    account under which the caller is being executed.
 2. If no capsule exists for the given account and contract address:
-   a. ensure that the current version of the contract code is present
-   b. instantiate contract local state fields with default values
-   c. read contract ledger state, saving the block ID at which that
+   1. ensure that the current version of the contract code is present
+   2. instantiate contract local state fields with default values
+   3. read contract ledger state, saving the block ID at which that
       state is current
-   d. execute local state initializer code, with the following in
+   4. execute local state initializer code, with the following in
       scope
       - ledger fields, holding the values found in the preceding step,
         with only read operations available
@@ -47,7 +47,7 @@ Title: Rules for Contract Operations
         initializer, with read and write operations available
       - context API
    If a capsule already exists for the given account and contract address:
-   a. process relevant transactions since detachment, including
+   1. process relevant transactions since detachment, including
       upgrades, running event handlers if any are defined for the
       contract (see Event Handing, below)
 
