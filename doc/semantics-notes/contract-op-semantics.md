@@ -46,7 +46,8 @@ Title: Rules for Contract Operations
       - local fields, holding default values at the start of the
         initializer, with read and write operations available
       - context API
-   If a capsule already exists for the given account and contract address:
+3. If, on the other hand, a capsule already exists for the given
+   account and contract address:
    1. process relevant transactions since detachment, including
       upgrades, running event handlers if any are defined for the
       contract (see Event Handing, below)
