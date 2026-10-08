@@ -59,7 +59,7 @@ context API.  Ledger fields are read-only, and the values seen by the
 code are those present at the block where the event was generated.
 Local fields are read-write. The capsule runtime captures transcripts
 of local state and context interactions and associates them with the
-blockchain transactions that triggered them, so that reply is possible
+blockchain transactions that triggered them, so that replay is possible
 and deterministic.
 
 The "normal" kinds of events witnessed by a capsule are
